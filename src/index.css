@@ -1,0 +1,49 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* White */
+    --foreground: 0 0% 3.9%; /* Almost Black for text */
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 0 0% 3.9%; /* Almost Black for text on cards */
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 0 0% 3.9%; /* Almost Black for text on popovers */
+    
+    --primary: 0 0% 9%; /* Black for primary UI elements */
+    --primary-foreground: 0 0% 98%; /* Almost White for text on primary elements */
+    
+    --secondary: 0 0% 96.1%; /* Light Gray for secondary UI elements */
+    --secondary-foreground: 0 0% 9%; /* Black for text on secondary elements */
+    
+    --muted: 0 0% 96.1%; /* Light Gray for muted text or elements */
+    --muted-foreground: 0 0% 45.1%; /* Mid Gray for muted text */
+    
+    --accent: 0 80% 50%; /* Red for accents and highlights */
+    --accent-foreground: 0 0% 98%; /* Almost White for text on accent elements */
+    
+    --destructive: 0 84.2% 60.2%; /* Default destructive red */
+    --destructive-foreground: 0 0% 98%; /* Almost White for text on destructive elements */
+    
+    --border: 0 0% 89.8%; /* Light Gray for borders */
+    --input: 0 0% 89.8%; /* Light Gray for input borders */
+    --ring: 0 80% 50%; /* Red for focus rings (accent color) */
+    
+    --radius: 0.5rem;
+  }
+
+  /* No dark mode styles for now, as per white background preference */
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+  
