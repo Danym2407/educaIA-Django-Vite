@@ -23,6 +23,8 @@ const LearningDashboard = lazy(() => import('@/pages/ProfilePage').then(module =
 const ProfileStats = lazy(() => import('@/pages/ProfilePage').then(module => ({ default: module.ProfileStats })));
 const MyCertificates = lazy(() => import('@/pages/ProfilePage').then(module => ({ default: module.MyCertificates })));
 const ProfileSettings = lazy(() => import('@/pages/ProfilePage').then(module => ({ default: module.ProfileSettings })));
+const ActivateAccountPage = lazy(() => import('@/pages/ActivateAccountPage')); // <--- AGREGAR ESTA LÍNEA
+
 import { AuthProvider } from '@/contexts/AuthContext';
 
 <AuthProvider>
@@ -60,6 +62,9 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/auth" element={<AuthPage />} />
+            
+            <Route path="/activate/:uidb64/:token" element={<ActivateAccountPage />} /> {/* <-- AGREGAR ESTA LÍNEA */}
+
             
             <Route path="/courses" element={<CoursesPage />} />
             <Route path="/courses/:filter" element={<CoursesPage />} />

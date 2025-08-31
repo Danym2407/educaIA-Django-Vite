@@ -9,17 +9,7 @@ import LessonControls from '@/components/course_viewer/LessonControls';
 import LessonProgressIndicator from '@/components/course_viewer/LessonProgressIndicator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-
-// Nueva función para obtener el curso desde Django
-const getCourseFromDjango = async (courseId) => {
-  try {
-    const response = await fetch(`http://localhost:8000/api/courses/${courseId}/`);
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    return null;
-  }
-};
+import { getCourseByIdES } from '@/lib/courseData'; // IMPORTANTE
 
 const CourseViewerPage = () => {
   const { courseId } = useParams();
@@ -37,27 +27,42 @@ const CourseViewerPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Si tu backend no tiene lecciones, esto quedará vacío
-  const allLessonsFlatRef = useRef([]);
+  // Obtiene todas las lecciones en una lista plana (útil para next/prev)
+  const getAllLessonsFlat = (courseData) => {
+    if (!courseData?.levels) return [];
+    let lessons = [];
+    courseData.levels.forEach(level =>
+      level.modules.forEach(module =>
+        module.lessons.forEach(lesson =>
+          lessons.push({ ...lesson, moduleId: module.id, levelId: level.id })
+        )
+      )
+    );
+    return lessons;
+  };
 
-  const parseDuration = useCallback((durationStr) => {
-    if (!durationStr || durationStr === 'N/A') return 0;
-    const parts = durationStr.split(':').map(Number);
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    return 0;
-  }, []);
+  // Busca la siguiente lección (o null)
+  const getNextLesson = (lessons, currentId) => {
+    const idx = lessons.findIndex(l => l.id === currentId);
+    return idx !== -1 && idx < lessons.length - 1 ? lessons[idx + 1] : null;
+  };
 
-  // Cambiado: ahora usa getCourseFromDjango
-  const fetchAndSetCourseStructure = useCallback(async () => {
+  // Busca la lección anterior (o null)
+  const getPrevLesson = (lessons, currentId) => {
+    const idx = lessons.findIndex(l => l.id === currentId);
+    return idx > 0 ? lessons[idx - 1] : null;
+  };
+
+  const fetchAndSetCourseStructure = useCallback(() => {
     setIsLoading(true);
-    const courseData = await getCourseFromDjango(courseId);
-    if (courseData) {
+    const courseData = getCourseByIdES(courseId);
+    if (courseData && courseData.levels?.length) {
       setCourse(courseData);
-      // Si tu backend no tiene lecciones, esto quedará vacío
-      allLessonsFlatRef.current = [];
-      setCurrentLesson(null);
+      const flatLessons = getAllLessonsFlat(courseData);
+      setCurrentLesson(flatLessons.length > 0 ? flatLessons[0] : null);
     } else {
+      setCourse(null);
+      setCurrentLesson(null);
       toast({ title: "Curso no encontrado", description: "No se pudo cargar la información del curso.", variant: "destructive" });
       navigate('/courses');
     }
@@ -75,8 +80,25 @@ const CourseViewerPage = () => {
     fetchAndSetCourseStructure();
   }, [courseId, isAuthenticated, authLoading, navigate, fetchAndSetCourseStructure]);
 
-  // El resto de la lógica de progreso de lecciones se omite porque depende de la estructura de tu backend.
-  // Puedes agregarla cuando tu backend tenga endpoints para progreso y lecciones.
+  // Progreso de lección (simulado)
+  const parseDuration = (durationStr) => {
+    if (!durationStr || durationStr === 'N/A') return 0;
+    const parts = durationStr.split(':').map(Number);
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return 0;
+  };
+
+  // Handlers de navegación de lecciones
+  const allLessonsFlat = course ? getAllLessonsFlat(course) : [];
+  const handlePrevLesson = () => {
+    const prevLesson = getPrevLesson(allLessonsFlat, currentLesson?.id);
+    if (prevLesson) setCurrentLesson(prevLesson);
+  };
+  const handleNextLesson = () => {
+    const nextLesson = getNextLesson(allLessonsFlat, currentLesson?.id);
+    if (nextLesson) setCurrentLesson(nextLesson);
+  };
 
   if (authLoading || isLoading) {
     return <div className="flex justify-center items-center h-screen bg-background"><div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-accent"></div></div>;
@@ -109,14 +131,13 @@ const CourseViewerPage = () => {
     return <div className="flex justify-center items-center h-screen bg-background"><p className="text-foreground">Cargando datos del curso o información de usuario no disponible...</p></div>;
   }
 
-  // Puedes mostrar los datos del curso aquí
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-var(--header-height,4rem))] bg-background text-foreground">
       <CourseSidebar 
         course={course}
         currentLesson={currentLesson}
-        onLessonClick={() => {}} // Sin lecciones, esto queda vacío
-        overallProgress={0}
+        onLessonClick={setCurrentLesson}
+        overallProgress={0} // Puedes calcular progreso real si implementas lógica
         isLessonLocked={() => false}
         isLessonCompleted={() => false}
         getModuleProgress={() => 0}
@@ -133,14 +154,14 @@ const CourseViewerPage = () => {
           currentLesson={currentLesson}
           isPlaying={isPlaying}
           onPlayPause={() => setIsPlaying(!isPlaying)}
-          onPrevLesson={() => {}}
-          onNextLesson={() => {}}
-          isPrevLessonDisabled={true}
-          isNextLessonDisabled={true}
+          onPrevLesson={handlePrevLesson}
+          onNextLesson={handleNextLesson}
+          isPrevLessonDisabled={!getPrevLesson(allLessonsFlat, currentLesson?.id)}
+          isNextLessonDisabled={!getNextLesson(allLessonsFlat, currentLesson?.id)}
         />
         <LessonProgressIndicator
           watchedTime={watchedTime}
-          currentLessonDuration={currentLesson?.duration || 0}
+          currentLessonDuration={currentLesson ? parseDuration(currentLesson.duration) : 0}
           currentLessonProgressPercentage={0}
           isCurrentLessonCompleted={false}
           onMarkCompleted={() => {}}

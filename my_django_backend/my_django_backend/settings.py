@@ -70,10 +70,12 @@ TEMPLATES = [
     },
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5174",
-    "http://127.0.0.1:5173",
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",   # <-- AGREGADO
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",   # <-- si tu Vite corre aquí también, déjalo
 ]
 
 WSGI_APPLICATION = 'my_django_backend.wsgi.application'
@@ -130,3 +132,10 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
