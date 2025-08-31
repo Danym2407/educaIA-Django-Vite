@@ -13,6 +13,8 @@ import { getCourseStructureFromAPI } from '@/lib/courseData';
 
 const BACKEND_PROGRESS_URL = 'http://localhost:8000/api/lesson-progress';
 
+const MIN_COMPLETE_PERCENTAGE = 0.9;
+
 const CourseViewerPage = () => {
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -32,6 +34,7 @@ const CourseViewerPage = () => {
   const [lessonProgressMap, setLessonProgressMap] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const saveTimeout = useRef(null);
 
   // Helpers para estructura plana
   const getAllLessonsFlat = (courseData) => {
@@ -108,47 +111,102 @@ const CourseViewerPage = () => {
       });
     setIsPlaying(false);
     setVideoDuration(0);
-    if (playerInstance && playerInstance.stopVideo) playerInstance.stopVideo();
+    // No llames a playerInstance.stopVideo aquí
   }, [currentLesson, courseId, user, isAuthenticated]);
 
-  // Guardar progreso en backend cuando se actualice watchedTime o completed
+  // Debounce el guardado de progreso (cada 5 segundos o al marcar completado)
   useEffect(() => {
     if (!currentLesson || !isAuthenticated) return;
-    fetch(`${BACKEND_PROGRESS_URL}/${currentLesson.id}/`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-      },
-      body: JSON.stringify({
-        watched_time: Math.round(watchedTime),
-        completed: lessonCompleted,
-      }),
-    });
-    setLessonProgressMap(prev => ({
-      ...prev,
-      [currentLesson.id]: { watchedTime, completed: lessonCompleted }
-    }));
+
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+
+    saveTimeout.current = setTimeout(() => {
+      fetch(`${BACKEND_PROGRESS_URL}/${currentLesson.id}/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+        },
+        body: JSON.stringify({
+          watched_time: Math.round(watchedTime),
+          completed: lessonCompleted,
+        }),
+      });
+      setLessonProgressMap(prev => ({
+        ...prev,
+        [currentLesson.id]: { watchedTime, completed: lessonCompleted }
+      }));
+    }, lessonCompleted ? 200 : 5000);
+
+    return () => clearTimeout(saveTimeout.current);
   }, [watchedTime, lessonCompleted, currentLesson, isAuthenticated]);
 
-  // Progreso de módulo y curso
+  // Interval para actualizar watchedTime localmente y marcar completado SOLO si vio el 90%+
+  useEffect(() => {
+    let interval;
+    if (playerInstance && isPlaying) {
+      interval = setInterval(() => {
+        const current = playerInstance.getCurrentTime();
+        setWatchedTime(current);
+        const duration = playerInstance.getDuration();
+        setVideoDuration(duration);
+        // Solo marcar completado si vio al menos el 90% del video
+        if (
+          duration > 0 &&
+          current / duration >= MIN_COMPLETE_PERCENTAGE &&
+          !lessonCompleted
+        ) {
+          setLessonCompleted(true);
+          setIsPlaying(false);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [playerInstance, isPlaying, lessonCompleted]);
+
+  // Avance automático SÓLO cuando lessonCompleted pase de false a true
+  useEffect(() => {
+    if (lessonCompleted) {
+      const flatLessons = getAllLessonsFlat(course);
+      const idx = flatLessons.findIndex(l => l.id === currentLesson.id);
+      if (idx !== -1 && idx < flatLessons.length - 1) {
+        setTimeout(() => setCurrentLesson(flatLessons[idx + 1]), 1300);
+        toast({ title: "¡Lección completada!", description: "Avanzando a la siguiente lección..." });
+      } else if (idx !== -1 && idx === flatLessons.length - 1) {
+        toast({ title: "¡Curso finalizado!", description: "¡Felicidades, has terminado el curso!" });
+      }
+    }
+  }, [lessonCompleted, course, currentLesson, toast]);
+
+  // Helper para saber si un módulo está terminado
   const getLessonProgress = (lessonId) => lessonProgressMap[lessonId] || { watchedTime: 0, completed: false };
-  const getModuleProgress = (moduleId) => {
-    if (!course) return 0;
-    const module = course.levels.flatMap(l => l.modules).find(m => m.id === moduleId);
-    if (!module) return 0;
-    const total = module.lessons.length;
-    const completed = module.lessons.filter(lesson => getLessonProgress(lesson.id).completed).length;
-    return total ? (completed / total) * 100 : 0;
+  const isModuleCompleted = (module) => {
+    return module.lessons.every(lesson => getLessonProgress(lesson.id).completed);
   };
 
-  const overallProgress = (() => {
-    if (!course) return 0;
-    const allLessons = course.levels.flatMap(l => l.modules).flatMap(m => m.lessons);
-    const total = allLessons.length;
-    const completed = allLessons.filter(lesson => getLessonProgress(lesson.id).completed).length;
-    return total ? (completed / total) * 100 : 0;
-  })();
+// Progreso de módulo: % lecciones completadas en ese módulo
+// Helper para saber el progreso de cada módulo (ya lo tienes)
+const getModuleProgress = (moduleId) => {
+  if (!course) return 0;
+  const module = course.levels.flatMap(l => l.modules).find(m => m.id === moduleId);
+  if (!module) return 0;
+  const total = module.lessons.length;
+  const completed = module.lessons.filter(lesson => getLessonProgress(lesson.id).completed).length;
+  return total ? (completed / total) * 100 : 0;
+};
+
+// Progreso del curso: promedio del % de avance de cada módulo
+const overallProgress = (() => {
+  if (!course) return 0;
+  const allModules = course.levels.flatMap(l => l.modules);
+  if (allModules.length === 0) return 0;
+  const sumModuleProgress = allModules.reduce((sum, module) => {
+    const total = module.lessons.length;
+    const completed = module.lessons.filter(lesson => getLessonProgress(lesson.id).completed).length;
+    return sum + (total ? (completed / total) : 0);
+  }, 0);
+  return (sumModuleProgress / allModules.length) * 100;
+})();
 
   // Navegación entre lecciones
   const allLessonsFlat = course ? getAllLessonsFlat(course) : [];
@@ -180,22 +238,8 @@ const CourseViewerPage = () => {
     setIsPlaying((prev) => !prev);
   };
 
-  useEffect(() => {
-    let interval;
-    if (playerInstance && isPlaying) {
-      interval = setInterval(() => {
-        const current = playerInstance.getCurrentTime();
-        setWatchedTime(current);
-        const duration = playerInstance.getDuration();
-        setVideoDuration(duration);
-        if (duration && current >= duration - 2) setLessonCompleted(true);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [playerInstance, isPlaying]);
-
   const handleStateChange = (event) => {
-    if (event.data === 0) { // ended
+    if (event.data === 0 && videoDuration && watchedTime / videoDuration >= MIN_COMPLETE_PERCENTAGE && !lessonCompleted) {
       setLessonCompleted(true);
       setIsPlaying(false);
     }

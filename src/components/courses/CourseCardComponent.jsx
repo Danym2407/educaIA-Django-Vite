@@ -1,10 +1,22 @@
-
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Star, Clock, PlayCircle, Bookmark } from 'lucide-react';
+
+const statusLabel = (status) => {
+  switch (status) {
+    case 'active':
+      return <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full mr-1">Suscrito</span>;
+    case 'catalog':
+      return <span className="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full mr-1">Disponible</span>;
+    case 'recommended':
+      return <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full mr-1">Recomendado</span>;
+    default:
+      return null;
+  }
+};
 
 const CourseCardComponent = ({ course, onStartContinue, onSaveLater, onPlayTrailer }) => {
 
@@ -31,14 +43,21 @@ const CourseCardComponent = ({ course, onStartContinue, onSaveLater, onPlayTrail
               )}
             </div>
             <CardHeader className="p-3 sm:p-4 flex-grow">
-              <CardTitle className="text-sm sm:text-md font-semibold leading-tight group-hover:text-accent line-clamp-2">{course.title}</CardTitle>
-              {course.tags && course.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {course.tags.slice(0, 2).map(tag => (
-                    <span key={tag} className="text-xs bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded-full">{tag}</span>
-                  ))}
-                </div>
-              )}
+              <CardTitle className="text-sm sm:text-md font-semibold leading-tight group-hover:text-accent line-clamp-2">
+                {course.title}
+              </CardTitle>
+              {/* STATUS + PROGRESS */}
+              <div className="flex flex-wrap gap-1 mt-1 items-center">
+                {statusLabel(course.status)}
+                {typeof course.progress === 'number' && course.progress > 0 && (
+                  <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">{course.progress.toFixed(0)}% Completado</span>
+                )}
+                {course.tags && course.tags.slice(0, 2).map(tag => (
+                  <span key={tag} className="text-xs bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded-full">
+                    {tag}
+                  </span>
+                ))}
+              </div>
             </CardHeader>
           </Card>
         </motion.div>
@@ -98,4 +117,3 @@ const CourseCardComponent = ({ course, onStartContinue, onSaveLater, onPlayTrail
 };
 
 export default CourseCardComponent;
-  
