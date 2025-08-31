@@ -185,11 +185,12 @@ export default defineConfig({
 	customLogger: logger,
 	plugins: [react(), addTransformIndexHtml],
 	server: {
-		cors: true,
-		headers: {
-			'Cross-Origin-Embedder-Policy': 'credentialless',
-		},
-		allowedHosts: true,
+	cors: true,
+	// Quita o comenta la línea de Cross-Origin-Embedder-Policy
+	// headers: {
+	//   'Cross-Origin-Embedder-Policy': 'credentialless',
+	// },
+	allowedHosts: true,
 	},
 	resolve: {
 		extensions: ['.jsx', '.js', '.tsx', '.ts', '.json', ],

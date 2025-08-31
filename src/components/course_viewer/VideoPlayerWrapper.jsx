@@ -27,7 +27,7 @@ const VideoPlayerWrapper = ({ lesson, isPlaying, playerRef }) => {
         ref={playerRef}
         width="100%"
         height="100%"
-        src={`https://www.youtube.com/embed/${lesson.videoId}?autoplay=${isPlaying ? 1:0}&rel=0&modestbranding=1&showinfo=0&cc_lang_pref=es&hl=es&enablejsapi=1&origin=${window.location.origin}`}
+        src={`https://www.youtube.com/embed/${lesson.videoId}`}
         title={lesson.title}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen

@@ -34,7 +34,18 @@ export const placeholderCoursesDataES = [
   },
 ];
 
-// Nueva función usando fetch para Django API
+// Función robusta para extraer el videoId de YouTube tanto de un id como de una URL.
+const getYouTubeVideoId = (video_url_or_id) => {
+  if (!video_url_or_id) return '';
+  // Si ya parece un ID de YouTube (11 caracteres, sin / ni =)
+  if (/^[a-zA-Z0-9_-]{11}$/.test(video_url_or_id)) return video_url_or_id;
+  // Si es una URL, extrae el ID
+  const regExp = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]{11}).*/;
+  const match = video_url_or_id.match(regExp);
+  return match ? match[2] : '';
+};
+
+// Fetch a course structure from Django API, formateando la estructura y asignando videoId correctamente
 export const getCourseStructureFromAPI = async (courseId) => {
   try {
     const response = await fetch(`http://localhost:8000/api/courses/${courseId}/structure/`);
@@ -48,13 +59,6 @@ export const getCourseStructureFromAPI = async (courseId) => {
       return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
     };
 
-    const getYouTubeVideoId = (url) => {
-      if (!url) return 'dQw4w9WgXcQ'; 
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-      const match = url.match(regExp);
-      return (match && match[2].length === 11) ? match[2] : 'dQw4w9WgXcQ'; 
-    };
-
     const formattedCourse = {
       id: courseData.id,
       title: courseData.title,
@@ -62,22 +66,23 @@ export const getCourseStructureFromAPI = async (courseId) => {
       coverImage: courseData.cover_image_url,
       levels: (courseData.levels || []).sort((a, b) => a.order - b.order).map(level => ({
         id: level.id,
-        name: level.title,
+        name: level.name || level.title,
         description: level.description,
         order: level.order,
         modules: (level.modules || []).sort((a, b) => a.order - b.order).map(module => ({
           id: module.id,
-          name: module.title,
+          name: module.name || module.title,
           description: module.description,
           order: module.order,
           lessons: (module.lessons || []).sort((a, b) => a.order - b.order).map(lesson => ({
-            id: lesson.id, 
+            id: lesson.id,
             title: lesson.title,
             description: lesson.description,
-            duration: formatDuration(lesson.duration), 
-            videoId: getYouTubeVideoId(lesson.video_url), 
+            duration: formatDuration(lesson.duration),
+            // Obtiene videoId desde video_id (preferido), si no existe usa video_url
+            videoId: getYouTubeVideoId(lesson.video_id || lesson.video_url),
             order: lesson.order,
-            video_url: lesson.video_url 
+            video_url: lesson.video_url
           }))
         }))
       }))
@@ -125,6 +130,5 @@ export const getCourseByIdES = (courseId) => {
   };
 };
 
-// ...existing code...
-
-export const getCourseById = getCourseByIdES; // <-- Añade esta línea al final
+// Para compatibilidad con imports en el resto del código
+export const getCourseById = getCourseByIdES;
