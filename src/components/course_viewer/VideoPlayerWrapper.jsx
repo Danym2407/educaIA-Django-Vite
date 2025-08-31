@@ -1,8 +1,15 @@
-
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import YouTube from 'react-youtube';
 
-const VideoPlayerWrapper = ({ lesson, isPlaying, playerRef }) => {
+const VideoPlayerWrapper = ({
+  lesson,
+  isPlaying,
+  onPlayerReady,
+  onStateChange,
+}) => {
+  // Puedes usar useRef si necesitas exponer el player fuera, pero con onPlayerReady basta usualmente
+
   if (!lesson || !lesson.videoId) {
     return (
       <motion.div 
@@ -23,19 +30,30 @@ const VideoPlayerWrapper = ({ lesson, isPlaying, playerRef }) => {
       transition={{ duration: 0.3 }}
       className="aspect-video bg-black rounded-lg shadow-2xl overflow-hidden mb-4 relative"
     >
-      <iframe
-        ref={playerRef}
-        width="100%"
-        height="100%"
-        src={`https://www.youtube.com/embed/${lesson.videoId}`}
-        title={lesson.title}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        className="border-0"
-      ></iframe>
+      <YouTube
+        videoId={lesson.videoId}
+        opts={{
+          width: '100%',
+          height: '100%',
+          playerVars: {
+            autoplay: isPlaying ? 1 : 0,
+            controls: 1,
+            rel: 0,
+            modestbranding: 1,
+            showinfo: 0,
+            cc_lang_pref: 'es',
+            hl: 'es',
+            enablejsapi: 1,
+            origin: window.location.origin,
+          }
+        }}
+        onReady={onPlayerReady}
+        onStateChange={onStateChange}
+        className="w-full h-full"
+        iframeClassName="w-full h-full"
+      />
     </motion.div>
   );
 };
 
 export default VideoPlayerWrapper;
-  

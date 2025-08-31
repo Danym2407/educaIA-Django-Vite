@@ -9,7 +9,9 @@ import LessonControls from '@/components/course_viewer/LessonControls';
 import LessonProgressIndicator from '@/components/course_viewer/LessonProgressIndicator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { getCourseByIdES } from '@/lib/courseData'; // IMPORTANTE
+import { getCourseStructureFromAPI } from '@/lib/courseData';
+
+const BACKEND_PROGRESS_URL = 'http://localhost:8000/api/lesson-progress';
 
 const CourseViewerPage = () => {
   const { courseId } = useParams();
@@ -20,14 +22,18 @@ const CourseViewerPage = () => {
 
   const [course, setCourse] = useState(null);
   const [currentLesson, setCurrentLesson] = useState(null);
-  const [watchedTime, setWatchedTime] = useState(0);
-  const [lessonProgress, setLessonProgress] = useState({});
   const [isPlaying, setIsPlaying] = useState(false);
-  const playerRef = useRef(null);
+  const [playerInstance, setPlayerInstance] = useState(null);
+
+  const [watchedTime, setWatchedTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [lessonCompleted, setLessonCompleted] = useState(false);
+
+  const [lessonProgressMap, setLessonProgressMap] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Obtiene todas las lecciones en una lista plana (útil para next/prev)
+  // Helpers para estructura plana
   const getAllLessonsFlat = (courseData) => {
     if (!courseData?.levels) return [];
     let lessons = [];
@@ -41,21 +47,20 @@ const CourseViewerPage = () => {
     return lessons;
   };
 
-  // Busca la siguiente lección (o null)
   const getNextLesson = (lessons, currentId) => {
     const idx = lessons.findIndex(l => l.id === currentId);
     return idx !== -1 && idx < lessons.length - 1 ? lessons[idx + 1] : null;
   };
 
-  // Busca la lección anterior (o null)
   const getPrevLesson = (lessons, currentId) => {
     const idx = lessons.findIndex(l => l.id === currentId);
     return idx > 0 ? lessons[idx - 1] : null;
   };
 
-  const fetchAndSetCourseStructure = useCallback(() => {
+  // Cargar curso y seleccionar primera lección
+  const fetchAndSetCourseStructure = useCallback(async () => {
     setIsLoading(true);
-    const courseData = getCourseByIdES(courseId);
+    const courseData = await getCourseStructureFromAPI(courseId);
     if (courseData && courseData.levels?.length) {
       setCourse(courseData);
       const flatLessons = getAllLessonsFlat(courseData);
@@ -69,6 +74,7 @@ const CourseViewerPage = () => {
     setIsLoading(false);
   }, [courseId, navigate, toast]);
 
+  // Autenticación y carga inicial
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) {
@@ -80,16 +86,71 @@ const CourseViewerPage = () => {
     fetchAndSetCourseStructure();
   }, [courseId, isAuthenticated, authLoading, navigate, fetchAndSetCourseStructure]);
 
-  // Progreso de lección (simulado)
-  const parseDuration = (durationStr) => {
-    if (!durationStr || durationStr === 'N/A') return 0;
-    const parts = durationStr.split(':').map(Number);
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    return 0;
+  // Al cambiar de lección, cargar progreso de Django únicamente
+  useEffect(() => {
+    if (!currentLesson || !isAuthenticated) return;
+    fetch(`${BACKEND_PROGRESS_URL}/${currentLesson.id}/`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+      },
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        setWatchedTime(data?.watched_time || 0);
+        setLessonCompleted(data?.completed || false);
+        setLessonProgressMap(prev => ({
+          ...prev,
+          [currentLesson.id]: {
+            watchedTime: data?.watched_time || 0,
+            completed: data?.completed || false,
+          }
+        }));
+      });
+    setIsPlaying(false);
+    setVideoDuration(0);
+    if (playerInstance && playerInstance.stopVideo) playerInstance.stopVideo();
+  }, [currentLesson, courseId, user, isAuthenticated]);
+
+  // Guardar progreso en backend cuando se actualice watchedTime o completed
+  useEffect(() => {
+    if (!currentLesson || !isAuthenticated) return;
+    fetch(`${BACKEND_PROGRESS_URL}/${currentLesson.id}/`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+      },
+      body: JSON.stringify({
+        watched_time: Math.round(watchedTime),
+        completed: lessonCompleted,
+      }),
+    });
+    setLessonProgressMap(prev => ({
+      ...prev,
+      [currentLesson.id]: { watchedTime, completed: lessonCompleted }
+    }));
+  }, [watchedTime, lessonCompleted, currentLesson, isAuthenticated]);
+
+  // Progreso de módulo y curso
+  const getLessonProgress = (lessonId) => lessonProgressMap[lessonId] || { watchedTime: 0, completed: false };
+  const getModuleProgress = (moduleId) => {
+    if (!course) return 0;
+    const module = course.levels.flatMap(l => l.modules).find(m => m.id === moduleId);
+    if (!module) return 0;
+    const total = module.lessons.length;
+    const completed = module.lessons.filter(lesson => getLessonProgress(lesson.id).completed).length;
+    return total ? (completed / total) * 100 : 0;
   };
 
-  // Handlers de navegación de lecciones
+  const overallProgress = (() => {
+    if (!course) return 0;
+    const allLessons = course.levels.flatMap(l => l.modules).flatMap(m => m.lessons);
+    const total = allLessons.length;
+    const completed = allLessons.filter(lesson => getLessonProgress(lesson.id).completed).length;
+    return total ? (completed / total) * 100 : 0;
+  })();
+
+  // Navegación entre lecciones
   const allLessonsFlat = course ? getAllLessonsFlat(course) : [];
   const handlePrevLesson = () => {
     const prevLesson = getPrevLesson(allLessonsFlat, currentLesson?.id);
@@ -98,6 +159,46 @@ const CourseViewerPage = () => {
   const handleNextLesson = () => {
     const nextLesson = getNextLesson(allLessonsFlat, currentLesson?.id);
     if (nextLesson) setCurrentLesson(nextLesson);
+  };
+
+  // Player handlers (para react-youtube o integración similar)
+  const handlePlayerReady = (event) => {
+    setPlayerInstance(event.target);
+    setVideoDuration(event.target.getDuration());
+    if (watchedTime > 0) {
+      setTimeout(() => event.target.seekTo(watchedTime, true), 500);
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (!playerInstance) return;
+    if (isPlaying) {
+      playerInstance.pauseVideo();
+    } else {
+      playerInstance.playVideo();
+    }
+    setIsPlaying((prev) => !prev);
+  };
+
+  useEffect(() => {
+    let interval;
+    if (playerInstance && isPlaying) {
+      interval = setInterval(() => {
+        const current = playerInstance.getCurrentTime();
+        setWatchedTime(current);
+        const duration = playerInstance.getDuration();
+        setVideoDuration(duration);
+        if (duration && current >= duration - 2) setLessonCompleted(true);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [playerInstance, isPlaying]);
+
+  const handleStateChange = (event) => {
+    if (event.data === 0) { // ended
+      setLessonCompleted(true);
+      setIsPlaying(false);
+    }
   };
 
   if (authLoading || isLoading) {
@@ -137,10 +238,10 @@ const CourseViewerPage = () => {
         course={course}
         currentLesson={currentLesson}
         onLessonClick={setCurrentLesson}
-        overallProgress={0} // Puedes calcular progreso real si implementas lógica
+        overallProgress={overallProgress}
         isLessonLocked={() => false}
-        isLessonCompleted={() => false}
-        getModuleProgress={() => 0}
+        isLessonCompleted={lessonId => getLessonProgress(lessonId).completed}
+        getModuleProgress={getModuleProgress}
         navigate={navigate}
       />
       <motion.main 
@@ -149,23 +250,28 @@ const CourseViewerPage = () => {
         transition={{ delay: 0.1, duration: 0.4 }}
         className="w-full md:w-[65%] lg:w-[70%] xl:w-[75%] h-full flex flex-col p-3 sm:p-4 md:p-6 bg-muted/20 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-background"
       >
-        <VideoPlayerWrapper lesson={currentLesson} isPlaying={isPlaying} playerRef={playerRef} />
+        <VideoPlayerWrapper
+          lesson={currentLesson}
+          isPlaying={isPlaying}
+          onPlayerReady={handlePlayerReady}
+          onStateChange={handleStateChange}
+        />
         <LessonControls
           currentLesson={currentLesson}
           isPlaying={isPlaying}
-          onPlayPause={() => setIsPlaying(!isPlaying)}
+          onPlayPause={handlePlayPause}
           onPrevLesson={handlePrevLesson}
           onNextLesson={handleNextLesson}
           isPrevLessonDisabled={!getPrevLesson(allLessonsFlat, currentLesson?.id)}
-          isNextLessonDisabled={!getNextLesson(allLessonsFlat, currentLesson?.id)}
+          isNextLessonDisabled={!lessonCompleted}
         />
         <LessonProgressIndicator
           watchedTime={watchedTime}
-          currentLessonDuration={currentLesson ? parseDuration(currentLesson.duration) : 0}
-          currentLessonProgressPercentage={0}
-          isCurrentLessonCompleted={false}
-          onMarkCompleted={() => {}}
-          formatTime={(s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`}
+          currentLessonDuration={Math.floor(videoDuration)}
+          currentLessonProgressPercentage={videoDuration ? (watchedTime / videoDuration) * 100 : 0}
+          isCurrentLessonCompleted={lessonCompleted}
+          onMarkCompleted={() => setLessonCompleted(true)}
+          formatTime={(s) => `${Math.floor(s / 60)}:${(Math.floor(s) % 60).toString().padStart(2, '0')}`}
         />
         <div className="mt-auto pt-4 text-xs text-muted-foreground text-center">
           <p>El contenido del video es para fines de demostración. El contenido real del curso variará.</p>

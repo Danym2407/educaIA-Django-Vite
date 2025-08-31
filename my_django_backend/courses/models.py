@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 class Course(models.Model):
     title = models.CharField(max_length=200)
@@ -26,3 +27,12 @@ class Lesson(models.Model):
     duration = models.CharField(max_length=10)  # Ej: '10:32'
     video_id = models.CharField(max_length=20)  # YouTube videoId
     order = models.PositiveIntegerField(default=1)
+
+class LessonProgress(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE)
+    watched_time = models.PositiveIntegerField(default=0)  # en segundos
+    completed = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('user', 'lesson')
