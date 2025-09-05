@@ -62,10 +62,23 @@ const CourseCatalogView = () => {
     const fetchAllCourses = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch('http://localhost:8000/api/courses/');
+        const response = await fetch('http://localhost:8000/api/courses/', {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+          },
+        });
         if (!response.ok) throw new Error('No se pudieron cargar los cursos');
         const data = await response.json();
-        setAllCourses(data.map(formatCourse));
+        const formattedCourses = data.map(course => ({
+          ...course,
+          tags: Array.isArray(course.tags)
+            ? course.tags
+            : (course.tags ? course.tags.split(',') : []),
+          coverImage: course.cover_image_url,
+          enrolled: course.enrolled,     // <-- del backend
+          completed: course.completed,   // <-- del backend
+        }));
+        setAllCourses(formattedCourses);
       } catch (error) {
         toast({ title: "Error", description: error.message, variant: "destructive" });
         setAllCourses([]);
