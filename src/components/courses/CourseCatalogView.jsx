@@ -14,7 +14,7 @@ const CourseCatalogView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,23 +22,51 @@ const CourseCatalogView = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [courseToRedirect, setCourseToRedirect] = useState(null);
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState(null);
 
   // Formatea el curso recibido de Django
   const formatCourse = useCallback((course) => ({
-  id: course.id,
-  title: course.title,
-  description: course.description,
-  category: course.category,
-  tags: Array.isArray(course.tags)
-    ? course.tags
-    : (course.tags ? course.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []),
-  duration: course.duration ? `${course.duration} min` : 'N/A',
-  rating: course.rating || 0,
-  coverImage: course.cover_image_url,
-  trailerUrl: course.trailer_url || null,
-  status: 'catalog',
-  progress: 0,
-}), []);
+    id: course.id,
+    title: course.title,
+    description: course.description,
+    category: course.category,
+    tags: Array.isArray(course.tags)
+      ? course.tags
+      : (course.tags ? course.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []),
+    duration: course.duration ? `${course.duration} min` : 'N/A',
+    rating: course.rating || 0,
+    coverImage: course.cover_image_url,
+    trailerUrl: course.trailer_url || null,
+    status: course.is_enrolled ? 'enrolled' : 'catalog',
+    progress: 0,
+    isEnrolled: course.is_enrolled,
+    lessons: course.lessons || [], // <-- asegúrate de recibir esto del backend
+  }), []);
+
+  // Carga los cursos desde el backend
+  const fetchAllCourses = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('authToken');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token && isAuthenticated) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const response = await fetch('http://localhost:8000/api/courses/', { headers });
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        const courses = data.map(formatCourse);
+        setAllCourses(courses);
+      } else {
+        setAllCourses([]);
+      }
+    } catch (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      setAllCourses([]);
+    }
+    setIsLoading(false);
+  }, [formatCourse, toast, isAuthenticated]);
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -48,7 +76,7 @@ const CourseCatalogView = () => {
     }
 
     const filterParam = location.pathname.split('/').pop();
-    if (['my-active', 'recommended', 'all'].includes(filterParam) && filterParam !== 'courses') {
+    if (['my-active', 'recommended', 'all', 'completed'].includes(filterParam) && filterParam !== 'courses') {
       setActiveTab(filterParam);
     } else {
       setActiveTab('all');
@@ -59,45 +87,22 @@ const CourseCatalogView = () => {
   }, [location, navigate]);
 
   useEffect(() => {
-    const fetchAllCourses = async () => {
-      setIsLoading(true);
-      try {
-        const response = await fetch('http://localhost:8000/api/courses/', {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        });
-        if (!response.ok) throw new Error('No se pudieron cargar los cursos');
-        const data = await response.json();
-        const formattedCourses = data.map(course => ({
-          ...course,
-          tags: Array.isArray(course.tags)
-            ? course.tags
-            : (course.tags ? course.tags.split(',') : []),
-          coverImage: course.cover_image_url,
-          enrolled: course.enrolled,     // <-- del backend
-          completed: course.completed,   // <-- del backend
-        }));
-        setAllCourses(formattedCourses);
-      } catch (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
-        setAllCourses([]);
-      }
-      setIsLoading(false);
-    };
     fetchAllCourses();
-  }, [formatCourse, toast]);
+  }, [fetchAllCourses]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
   };
 
-  const handleCourseAccess = (courseId) => {
+  const handleCourseAccess = (course) => {
     if (!isAuthenticated) {
-      setCourseToRedirect(courseId);
+      setCourseToRedirect(course.id);
       setShowLoginModal(true);
+    } else if (!course.isEnrolled) {
+      setSelectedCourse(course);
+      setShowEnrollModal(true);
     } else {
-      navigate(`/courses/view/${courseId}`);
+      navigate(`/courses/view/${course.id}`);
     }
   };
 
@@ -119,22 +124,39 @@ const CourseCatalogView = () => {
     );
   };
 
+  // Cursos donde todas las lecciones están completadas
+  const isCourseCompleted = (course) =>
+    course.lessons &&
+    course.lessons.length > 0 &&
+    course.lessons.every(lesson => lesson.completed);
+
   const displayedCourses = {
     all: filterCourses(allCourses),
-    // Puedes implementar 'my-active' y 'recommended' según tu lógica de negocio
-    'my-active': [],
+    'my-active': filterCourses(allCourses.filter(c => c.isEnrolled && (!isCourseCompleted(c)))),
+    completed: filterCourses(allCourses.filter(c => c.isEnrolled && isCourseCompleted(c))),
     recommended: [],
   };
 
   const currentCategoryTitle = {
     all: "Catálogo Completo de Cursos",
     'my-active': "Mis Cursos Activos",
+    completed: "Cursos Finalizados",
     recommended: "Cursos Recomendados para Ti"
   };
 
   const handleTabChange = (value) => {
     setActiveTab(value);
     navigate(`/courses/${value}`, { replace: true });
+  };
+
+  // Cuando el usuario se inscribe, vuelve a cargar los cursos desde el backend
+  const handleEnroll = async () => {
+    await fetch(`http://localhost:8000/api/courses/${selectedCourse.id}/enroll/`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+    });
+    setShowEnrollModal(false);
+    fetchAllCourses();
   };
 
   if (isLoading) {
@@ -167,6 +189,25 @@ const CourseCatalogView = () => {
               Iniciar Sesión / Registrarse
             </Button>
             <Button type="button" variant="outline" onClick={() => setShowLoginModal(false)}>
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEnrollModal} onOpenChange={setShowEnrollModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Deseas inscribirte en este curso?</DialogTitle>
+            <DialogDescription>
+              {selectedCourse?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={handleEnroll}>
+              Inscribirme
+            </Button>
+            <Button variant="outline" onClick={() => setShowEnrollModal(false)}>
               Cancelar
             </Button>
           </DialogFooter>
@@ -213,8 +254,19 @@ const CourseCatalogView = () => {
           <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 gap-2 mb-8 bg-muted/60 rounded-lg">
             <TabsTrigger value="all" className="py-3 text-base data-[state=active]:bg-background data-[state=active]:text-accent data-[state=active]:shadow-md">📚 Catálogo Completo</TabsTrigger>
             <TabsTrigger value="my-active" className="py-3 text-base data-[state=active]:bg-background data-[state=active]:text-accent data-[state=active]:shadow-md" disabled={!isAuthenticated}>✅ Mis Cursos Activos</TabsTrigger>
+            <TabsTrigger value="completed" className="py-3 text-base data-[state=active]:bg-background data-[state=active]:text-accent data-[state=active]:shadow-md" disabled={!isAuthenticated}>
+              🏆 Cursos Finalizados
+            </TabsTrigger>
             <TabsTrigger value="recommended" className="py-3 text-base data-[state=active]:bg-background data-[state=active]:text-accent data-[state=active]:shadow-md">🔍 Recomendados</TabsTrigger>
           </TabsList>
+
+          <div className="my-6">
+            <hr className="border-muted" />
+          </div>
+
+          <h2 className="text-3xl font-bold mb-8 text-primary text-left">
+            {currentCategoryTitle[activeTab]}
+          </h2>
 
           <AnimatePresence mode="wait">
             <motion.div
@@ -229,7 +281,7 @@ const CourseCatalogView = () => {
                   <CourseCarousel
                     courses={displayedCourses[activeTab]}
                     onStartContinue={handleCourseAccess}
-                    onSaveLater={() => {}} // Puedes implementar esta función si tienes lógica de guardado
+                    onSaveLater={() => {}}
                     onPlayTrailer={handlePlayTrailer}
                     title={currentCategoryTitle[activeTab]}
                     isAuthenticated={isAuthenticated}

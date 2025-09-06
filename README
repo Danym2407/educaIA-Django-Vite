@@ -1,0 +1,100 @@
+# educaIA - Plataforma de Cursos Online
+
+**Autor:** Daniela Méndez Ramírez
+
+---
+
+## Descripción
+
+**educaIA** es una plataforma web de cursos online que permite a cualquier usuario explorar un catálogo de cursos, ver la estructura de cada curso y, tras autenticarse, inscribirse y acceder al contenido multimedia de cada lección. El sistema está compuesto por un backend en Django y un frontend en React.
+
+---
+
+## Lógica y Arquitectura
+
+### 1. Catálogo Público
+
+- **Cualquier usuario** (autenticado o no) puede ver el catálogo completo de cursos.
+- El frontend solo envía el token de autenticación si el usuario ha iniciado sesión, permitiendo así que el backend muestre el catálogo público a usuarios anónimos y el catálogo personalizado a usuarios autenticados.
+
+### 2. Visualización de Cursos
+
+- Al seleccionar un curso, se muestra la estructura completa (niveles, módulos, lecciones) **siempre**, incluso sin iniciar sesión.
+- El video y los controles de la lección **solo se muestran** si el usuario está autenticado **y** está inscrito en el curso.
+- Si el usuario no está autenticado, se le invita a iniciar sesión.
+- Si está autenticado pero no inscrito, se le ofrece la opción de inscribirse.
+
+### 3. Progreso y Control
+
+- El progreso de cada lección se guarda automáticamente mientras el usuario ve el video.
+- Al completar una lección (viendo al menos el 90%), se marca como completada y se avanza automáticamente a la siguiente.
+- El progreso se sincroniza con el backend para que el usuario pueda continuar donde lo dejó.
+
+### 4. Backend (Django)
+
+- Provee endpoints públicos para el catálogo y privados para inscripción, progreso y acceso a videos.
+- Usa permisos `AllowAny` para el catálogo y permisos de autenticación para las acciones protegidas.
+
+### 5. Frontend (React)
+
+- Usa React Router para navegación.
+- Usa Context para la autenticación.
+- Usa componentes reutilizables para el catálogo, la vista de curso, el sidebar, el reproductor de video y los controles de lección.
+- El estado de autenticación y progreso se maneja de forma reactiva.
+
+---
+
+## Instalación y Compilación
+
+### 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/tuusuario/educaIA.git
+cd educaIA
+```
+
+### 2. Backend (Django)
+
+```bash
+cd my_django_backend
+python -m venv venv
+source venv/bin/activate  # En Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser  # Opcional, para administración
+python manage.py runserver
+```
+
+- El backend estará disponible en `http://localhost:8000/`
+
+### 3. Frontend (React)
+
+```bash
+cd ../
+npm install
+npm run dev
+```
+
+- El frontend estará disponible en `http://localhost:5173/` (o el puerto que indique tu consola).
+
+---
+
+## Uso
+
+1. **Explora el catálogo:** Puedes ver todos los cursos sin iniciar sesión.
+2. **Inicia sesión o regístrate:** Para inscribirte y acceder a los videos.
+3. **Inscríbete en un curso:** Haz clic en "Inscribirme" en la vista del curso.
+4. **Avanza en las lecciones:** El progreso se guarda automáticamente.
+5. **Finaliza el curso:** Al completar todas las lecciones, el curso se marca como finalizado.
+
+---
+
+## Créditos
+
+Desarrollado por **Daniela Méndez Ramírez**.
+
+---
+
+## Licencia
+
+Este proyecto es de uso académico y demostrativo.

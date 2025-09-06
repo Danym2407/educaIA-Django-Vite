@@ -37,6 +37,7 @@ class LessonProgress(models.Model):
     class Meta:
         unique_together = ('user', 'lesson')
         
+        
 class Enrollment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='enrollments')
     course = models.ForeignKey('Course', on_delete=models.CASCADE, related_name='enrollments')

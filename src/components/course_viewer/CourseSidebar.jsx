@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -14,6 +13,7 @@ const CourseSidebar = ({
   isLessonCompleted,
   getModuleProgress,
   navigate,
+  formatTime,
 }) => {
   if (!course || !course.levels) {
     return (
@@ -82,7 +82,7 @@ const CourseSidebar = ({
                              <TvMinimalPlay className="h-4 w-4 mr-2 text-primary/70 flex-shrink-0" />}
                             <span className="truncate" title={lesson.title}>{lesson.title}</span>
                           </span>
-                          <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">{lesson.duration}</span>
+                          <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">{formatTime(lesson.duration)}</span>
                         </button>
                       </li>
                     );
@@ -98,4 +98,3 @@ const CourseSidebar = ({
 };
 
 export default CourseSidebar;
-  

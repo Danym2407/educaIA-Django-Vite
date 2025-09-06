@@ -1,36 +1,37 @@
-from rest_framework import serializers
-from .models import Course, LessonProgress, Enrollment
+from rest_framework import serializers, generics
+from .models import Course, LessonProgress, Enrollment, Lesson
+from rest_framework.permissions import AllowAny
 
 class CourseSerializer(serializers.ModelSerializer):
-    enrolled = serializers.SerializerMethodField()
-    completed = serializers.SerializerMethodField()
+    is_enrolled = serializers.SerializerMethodField()
+    completed = serializers.SerializerMethodField()  # <-- Nuevo campo
 
     class Meta:
         model = Course
         fields = (
             'id', 'title', 'description', 'category', 'tags', 'duration', 'rating', 'cover_image_url',
-            'enrolled', 'completed'
+            'is_enrolled', 'completed',  # <-- Agrega aquí
         )
 
-    def get_enrolled(self, obj):
-        user = self.context.get('request').user
-        if user.is_authenticated:
-            return Enrollment.objects.filter(user=user, course=obj).exists()
+    def get_is_enrolled(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user and user.is_authenticated:
+            return obj.enrollments.filter(user=user).exists()
         return False
 
     def get_completed(self, obj):
-        user = self.context.get('request').user
-        if not user.is_authenticated:
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
             return False
-        # Un curso está completado si TODAS las lecciones están completadas por el usuario
-        lessons = obj.levels.prefetch_related('modules__lessons').values_list('modules__lessons__id', flat=True)
-        total_lessons = len(lessons)
-        if total_lessons == 0:
+        # Obtén todas las lecciones del curso
+        lesson_ids = Lesson.objects.filter(module__level__course=obj).values_list('id', flat=True)
+        total = len(lesson_ids)
+        if total == 0:
             return False
-        completed_count = LessonProgress.objects.filter(
-            user=user, lesson_id__in=lessons, completed=True
-        ).count()
-        return completed_count == total_lessons
+        completed = LessonProgress.objects.filter(user=user, lesson_id__in=lesson_ids, completed=True).count()
+        return completed == total
 
 class LessonProgressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -42,3 +43,14 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
         fields = ['id', 'user', 'course', 'enrolled_at']
+
+# Si quieres dejar la vista aquí, está bien, pero normalmente va en views.py
+class CourseListView(generics.ListAPIView):
+    queryset = Course.objects.all()
+    serializer_class = CourseSerializer
+    permission_classes = [AllowAny]  # Permite acceso público
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context

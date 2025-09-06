@@ -17,6 +17,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Carga el perfil del usuario autenticado
   const fetchProfile = async (token) => {
     setLoading(true);
     try {

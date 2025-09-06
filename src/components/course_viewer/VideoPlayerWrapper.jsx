@@ -8,7 +8,54 @@ const VideoPlayerWrapper = ({
   onPlayerReady,
   onStateChange,
 }) => {
-  // Puedes usar useRef si necesitas exponer el player fuera, pero con onPlayerReady basta usualmente
+  const playerRef = useRef(null);
+
+  // Guarda la referencia al player de YouTube
+  const handlePlayerReady = (event) => {
+    playerRef.current = event.target;
+    if (onPlayerReady) onPlayerReady(event);
+  };
+
+  // Enviar progreso cada 10 segundos
+  useEffect(() => {
+    if (!lesson || !lesson.id) return;
+    const interval = setInterval(() => {
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+        const currentTime = Math.floor(playerRef.current.getCurrentTime());
+        const token = localStorage.getItem('authToken');
+        fetch(`http://localhost:8000/api/lesson-progress/${lesson.id}/`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ progress_seconds: currentTime })
+        });
+      }
+    }, 1000); // cada 10 segundos
+
+    return () => clearInterval(interval);
+  }, [lesson]);
+
+  // También puedes guardar al pausar o salir del video
+  const handleStateChange = (event) => {
+    if (onStateChange) onStateChange(event);
+    // 2 = paused, 0 = ended
+    if (event.data === 2 || event.data === 0) {
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+        const currentTime = Math.floor(playerRef.current.getCurrentTime());
+        const token = localStorage.getItem('authToken');
+        fetch(`http://localhost:8000/api/lesson-progress/${lesson.id}/`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ progress_seconds: currentTime })
+        });
+      }
+    }
+  };
 
   if (!lesson || !lesson.videoId) {
     return (
@@ -47,8 +94,8 @@ const VideoPlayerWrapper = ({
             origin: window.location.origin,
           }
         }}
-        onReady={onPlayerReady}
-        onStateChange={onStateChange}
+        onReady={handlePlayerReady}
+        onStateChange={handleStateChange}
         className="w-full h-full"
         iframeClassName="w-full h-full"
       />
